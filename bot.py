@@ -1,9 +1,13 @@
 import asyncio
 import os
+import logging
 from aiohttp import web  # Импортируем веб-сервер
 from aiogram import Bot, Dispatcher, types, F
 from aiogram.filters import Command
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+
+# Включаем логирование, чтобы в Render было видно каждую ошибку
+logging.basicConfig(level=logging.INFO)
 
 # Твой рабочий токен бота
 TOKEN = "8955221421:AAGQncSWAJBnKxnJ_rm9Z6B90ITxR_G9X0U"
@@ -11,7 +15,7 @@ TOKEN = "8955221421:AAGQncSWAJBnKxnJ_rm9Z6B90ITxR_G9X0U"
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
 
-# Обновленный словарь с детальным разбором мышечных акцентов
+# Словарь с упражнениями и анатомическими акцентами
 exercises = {
     "Спина": [
         {"name": "Подтягивания", "target": "Широчайшие мышцы (работа в ширину, верхний отдел) и большая круглая мышца"},
@@ -42,4 +46,50 @@ exercises = {
 }
 
 def get_muscle_keyboard():
-    # Теперь callback
+    buttons = [
+        [InlineKeyboardButton(text="Спина", callback_data="Спина")],
+        [InlineKeyboardButton(text="Бицепс", callback_data="Бицепс")],
+        [InlineKeyboardButton(text="Грудь", callback_data="Грудь")],
+        [InlineKeyboardButton(text="Трицепс", callback_data="Трицепс")],
+        [InlineKeyboardButton(text="Ноги", callback_data="Ноги")]
+    ]
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+@dp.message(Command("start"))
+async def cmd_start(message: types.Message):
+    await message.answer("Привет! Выбери группу мышц для тренировки:", reply_markup=get_muscle_keyboard())
+
+# ИСПРАВЛЕНО: Теперь мы строго проверяем список строк через list(exercises.keys())
+@dp.callback_query(lambda callback: callback.data in list(exercises.keys()))
+async def show_exercises(callback: types.CallbackQuery):
+    muscle = callback.data
+    
+    ex_list = []
+    for item in exercises[muscle]:
+        ex_list.append(f"💪 {item['name']}\n🎯 Акцент: {item['target']}\n")
+        
+    text = f"🏋️‍♂️ Упражнения на группу [{muscle}]:\n\n" + "\n".join(ex_list)
+    
+    await callback.message.answer(text)
+    await callback.answer()
+
+# --- ХИТРОСТЬ ДЛЯ RENDER ---
+async def handle_root(request):
+    return web.Response(text="Бот запущен и работает 24/7!")
+
+async def start_dummy_server():
+    app = web.Application()
+    app.router.add_get('/', handle_root)
+    runner = web.AppRunner(app)
+    await runner.setup()
+    port = int(os.environ.get("PORT", 8080))
+    site = web.TCPSite(runner, "0.0.0.0", port)
+    await site.start()
+
+async def main():
+    await start_dummy_server()  # Сначала запускаем веб-заглушку
+    print("Бот запущен и готов к работе...")
+    await dp.start_polling(bot)
+
+if __name__ == "__main__":
+    asyncio.run(main())
